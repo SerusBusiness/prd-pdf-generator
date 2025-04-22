@@ -1,0 +1,10 @@
+requests
+reportlab
+pypdf
+pillow
+beautifulsoup4
+lxml
+markdown
+cairosvg
+python-dotenv
+duckduckgo-search
