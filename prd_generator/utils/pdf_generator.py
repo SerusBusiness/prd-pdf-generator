@@ -16,7 +16,7 @@ from reportlab.lib.units import inch, mm
 from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
-from prd_generator.config import Config
+from prd_generator.core.config import Config
 from PIL import Image as PILImage
 
 
@@ -227,10 +227,24 @@ class PDFGenerator:
         content.append(Paragraph(project_name, self.styles['PRDTitle']))
         content.append(Spacer(1, 0.5 * inch))
         
+        # Keep track of references - we'll add them at the end if there's no References section
+        found_references_section = False
+        
         # Process each section
         for section in self.config.prd_sections:
             # Skip sections that don't have content
-            if section not in prd_content or not prd_content[section].strip():
+            if section not in prd_content:
+                continue
+                
+            section_content = prd_content[section]
+            # Check if section_content is empty (handle both string and dict cases)
+            if isinstance(section_content, str):
+                if not section_content.strip():
+                    continue
+            elif isinstance(section_content, dict):
+                if not section_content:  # Empty dictionary
+                    continue
+            elif section_content is None:
                 continue
             
             # Add a page break before each major section except the first one
@@ -240,16 +254,31 @@ class PDFGenerator:
             # Add section heading
             content.append(Paragraph(section, self.styles['SectionHeading']))
             
-            # Process markdown text
-            section_content = prd_content[section]
-            html = markdown.markdown(section_content)
-            
-            # Split HTML into paragraphs
-            paragraphs = self._split_html_paragraphs(html)
-            
-            for p in paragraphs:
-                content.append(Paragraph(p, self.styles['PRDBodyText']))
-                content.append(Spacer(1, 0.1 * inch))
+            # Process markdown text - ensure section_content is a string
+            if isinstance(section_content, str):
+                html = markdown.markdown(section_content)
+                
+                # Split HTML into paragraphs
+                paragraphs = self._split_html_paragraphs(html)
+                
+                for p in paragraphs:
+                    content.append(Paragraph(p, self.styles['PRDBodyText']))
+                    content.append(Spacer(1, 0.1 * inch))
+            elif isinstance(section_content, dict):
+                # Handle dictionary content - convert each key-value pair to paragraphs
+                for key, value in section_content.items():
+                    if isinstance(value, str):
+                        # Add subsection header if key is meaningful
+                        if key not in ["content", "text"]:
+                            content.append(Paragraph(key, self.styles['SectionHeading']))
+                        
+                        # Process the value as markdown
+                        html = markdown.markdown(value)
+                        paragraphs = self._split_html_paragraphs(html)
+                        
+                        for p in paragraphs:
+                            content.append(Paragraph(p, self.styles['PRDBodyText']))
+                            content.append(Spacer(1, 0.1 * inch))
             
             # Add images or diagrams related to this section
             section_images = [img for img in image_files if img.get('section') == section]
@@ -271,14 +300,22 @@ class PDFGenerator:
                 if 'type' in item and item.get('type') in ['class', 'sequence', 'flowchart']:
                     content.append(Spacer(1, 0.1 * inch))
             
-            # Add references in the References section
-            if section == "References" and references:
-                content.append(Spacer(1, 0.2 * inch))
-                content.append(Paragraph("External References:", self.styles['PRDBodyText']))
+            # Add references in the References section with improved formatting
+            if section == "References":
+                found_references_section = True
+                # Add user-provided content from PRD first
+                if section_content:
+                    content.append(Spacer(1, 0.2 * inch))
                 
-                for ref in references:
-                    ref_text = f"{ref['title']} - <a href='{ref['url']}'>{ref['url']}</a>"
-                    content.append(Paragraph(ref_text, self.styles['Reference']))
+                # Add external references with better formatting
+                if references:
+                    self._add_references_to_content(content, references)
+        
+        # If there was no References section but we have references, add them at the end
+        if not found_references_section and references:
+            content.append(PageBreak())
+            content.append(Paragraph("References", self.styles['SectionHeading']))
+            self._add_references_to_content(content, references)
         
         # Build the PDF with error handling
         try:
@@ -307,7 +344,18 @@ class PDFGenerator:
         # Process each section
         for section in self.config.prd_sections:
             # Skip sections that don't have content
-            if section not in prd_content or not prd_content[section].strip():
+            if section not in prd_content:
+                continue
+                
+            section_content = prd_content[section]
+            # Check if section_content is empty (handle both string and dict cases)
+            if isinstance(section_content, str):
+                if not section_content.strip():
+                    continue
+            elif isinstance(section_content, dict):
+                if not section_content:  # Empty dictionary
+                    continue
+            elif section_content is None:
                 continue
             
             # Add a page break before each major section except the first one
@@ -317,16 +365,31 @@ class PDFGenerator:
             # Add section heading
             content.append(Paragraph(section, self.styles['SectionHeading']))
             
-            # Process markdown text
-            section_content = prd_content[section]
-            html = markdown.markdown(section_content)
-            
-            # Split HTML into paragraphs
-            paragraphs = self._split_html_paragraphs(html)
-            
-            for p in paragraphs:
-                content.append(Paragraph(p, self.styles['PRDBodyText']))
-                content.append(Spacer(1, 0.1 * inch))
+            # Process markdown text - ensure section_content is a string
+            if isinstance(section_content, str):
+                html = markdown.markdown(section_content)
+                
+                # Split HTML into paragraphs
+                paragraphs = self._split_html_paragraphs(html)
+                
+                for p in paragraphs:
+                    content.append(Paragraph(p, self.styles['PRDBodyText']))
+                    content.append(Spacer(1, 0.1 * inch))
+            elif isinstance(section_content, dict):
+                # Handle dictionary content - convert each key-value pair to paragraphs
+                for key, value in section_content.items():
+                    if isinstance(value, str):
+                        # Add subsection header if key is meaningful
+                        if key not in ["content", "text"]:
+                            content.append(Paragraph(key, self.styles['SectionHeading']))
+                        
+                        # Process the value as markdown
+                        html = markdown.markdown(value)
+                        paragraphs = self._split_html_paragraphs(html)
+                        
+                        for p in paragraphs:
+                            content.append(Paragraph(p, self.styles['PRDBodyText']))
+                            content.append(Spacer(1, 0.1 * inch))
             
             # Add images or diagrams related to this section
             section_images = [img for img in image_files if img.get('section') == section]
@@ -351,16 +414,35 @@ class PDFGenerator:
     def _extract_project_name(self, prd_content: dict) -> str:
         """Extract a project name from the PRD content."""
         if "Executive Summary" in prd_content:
-            # Try to get project name from first sentence of executive summary
-            first_sentence = prd_content["Executive Summary"].split('.')[0]
-            if "project" in first_sentence.lower():
-                return first_sentence
-            
-            # Or try first line
-            first_line = prd_content["Executive Summary"].split('\n')[0]
-            return first_line
+            # Check if the executive summary is a string or a dictionary
+            if isinstance(prd_content["Executive Summary"], str):
+                # Try to get project name from first sentence of executive summary
+                first_sentence = prd_content["Executive Summary"].split('.')[0]
+                if "project" in first_sentence.lower():
+                    return first_sentence
+                
+                # Or try first line
+                first_line = prd_content["Executive Summary"].split('\n')[0]
+                return first_line
+            elif isinstance(prd_content["Executive Summary"], dict):
+                # Handle the case when executive summary is a dictionary
+                # Try to extract a title or summary field
+                if "title" in prd_content["Executive Summary"]:
+                    return prd_content["Executive Summary"]["title"]
+                elif "summary" in prd_content["Executive Summary"]:
+                    return prd_content["Executive Summary"]["summary"]
+                # Return the first value in the dict if it's a string
+                for value in prd_content["Executive Summary"].values():
+                    if isinstance(value, str):
+                        return value.split('.')[0]
         
-        return "Project Requirements Document"
+        # Check other potential title locations
+        if "Project Title" in prd_content and isinstance(prd_content["Project Title"], str):
+            return prd_content["Project Title"]
+        if "Introduction" in prd_content and isinstance(prd_content["Introduction"], str):
+            return prd_content["Introduction"].split('.')[0]
+        
+        return "Product Requirements Document"
     
     def _split_html_paragraphs(self, html: str) -> list:
         """Split HTML content into individual paragraphs."""
@@ -582,3 +664,53 @@ class PDFGenerator:
             error_msg = f"[Could not include {'diagram' if is_diagram else 'image'}: {item_data.get('description', item_data.get('title', 'Image'))}]"
             content.append(Paragraph(error_msg, self.styles['PRDBodyText']))
             content.append(Spacer(1, 0.1 * inch))
+
+    def _add_references_to_content(self, content, references):
+        """Add formatted external references to the content with proper styling."""
+        if not references:
+            return
+            
+        content.append(Spacer(1, 0.3 * inch))
+        content.append(Paragraph("External References:", self.styles['SectionHeading']))
+        
+        # Create a more visually distinct reference style just for external links
+        external_ref_style = ParagraphStyle(
+            name='ExternalReference',
+            parent=self.styles['Reference'],
+            fontSize=10,
+            leftIndent=20,
+            spaceBefore=8,
+            spaceAfter=8,
+            textColor=colors.blue,
+            bulletIndent=10,
+            bulletText='•'
+        )
+        
+        # Group references by type if available
+        grouped_refs = {}
+        for ref in references:
+            ref_type = ref.get('type', 'Other')
+            if ref_type not in grouped_refs:
+                grouped_refs[ref_type] = []
+            grouped_refs[ref_type].append(ref)
+        
+        # Add references by group
+        for ref_type, refs in grouped_refs.items():
+            # Add the reference type as a subheading
+            content.append(Spacer(1, 0.1 * inch))
+            content.append(Paragraph(f"{ref_type}:", self.styles['PRDBodyText']))
+            
+            # Add each reference with bullet points and proper formatting
+            for ref in refs:
+                ref_title = ref.get('title', 'Reference')
+                ref_url = ref.get('url', '')
+                description = ref.get('description', '')
+                
+                if description:
+                    ref_text = f"<b>{ref_title}</b> - {description}<br/><a href='{ref_url}' color='blue'>{ref_url}</a>"
+                else:
+                    ref_text = f"<b>{ref_title}</b><br/><a href='{ref_url}' color='blue'>{ref_url}</a>"
+                    
+                content.append(Paragraph(ref_text, external_ref_style))
+        
+        return content

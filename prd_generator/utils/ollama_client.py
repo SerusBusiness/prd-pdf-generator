@@ -1,113 +1,248 @@
 """
-Ollama client for interacting with local LLM models
+OllamaClient for PRD Generator.
+Handles communication with Ollama API for LLM generation with caching support.
 """
 import json
-import requests
 import time
-import os
-from prd_generator.config import Config
+import requests
+from typing import Dict, Any, Optional, List, Union, Tuple
+import socket
 
+from prd_generator.utils.cache_manager import cached
+from prd_generator.core.logging_setup import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 class OllamaClient:
-    """Client for interacting with Ollama API."""
+    """
+    Client for interacting with Ollama API.
+    Includes caching support to minimize redundant API calls.
+    """
     
-    def __init__(self, config: Config):
-        """Initialize the Ollama client."""
-        self.config = config
-        self.api_base = config.ollama_host.rstrip('/')
-        self.model = config.ollama_model
-        # Define potential API endpoints to try
-        self.api_endpoints = [
-            "/api/generate",
-            "/v1/chat/completions",
-            "/api/v1/generate",
-        ]
-        # Print current configuration
-        print(f"Ollama API base: {self.api_base}")
-        print(f"Ollama model: {self.model}")
-    
-    def generate(self, prompt: str, max_retries: int = 3) -> str:
+    def __init__(self, config):
         """
-        Generate a response from the Ollama model.
+        Initialize the Ollama client.
         
         Args:
-            prompt: The prompt to send to the model
-            max_retries: Maximum number of retries in case of failure
-            
-        Returns:
-            str: Text response from the model
+            config: Configuration object containing Ollama settings
         """
-        # Try all API endpoints until one works
-        for endpoint in self.api_endpoints:
-            url = f"{self.api_base}{endpoint}"
-            print(f"Trying endpoint: {url}")
-            
-            # Adjust payload format based on endpoint
-            if "chat/completions" in endpoint:
-                # OpenAI-style API format
-                payload = {
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3,
-                }
-            else:
-                # Standard Ollama format
-                payload = {
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "keep_alive": -1,
-                    "temperature": 0.3,
-                }
-            
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(url, json=payload, timeout=120)
-                    response.raise_for_status()
-                    
-                    # Parse response based on API format
-                    if "chat/completions" in endpoint:
-                        return response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                    else:
-                        return response.json().get("response", "")
-                        
-                except requests.exceptions.RequestException as e:
-                    print(f"Error connecting to Ollama endpoint {endpoint} (attempt {attempt+1}/{max_retries}): {e}")
-                    if attempt == max_retries - 1:
-                        # If we've exhausted retries for this endpoint, try the next one
-                        break
-                    time.sleep(2)  # Wait before retrying
+        self.host = config.ollama_host
+        self.model = config.ollama_model
+        self.temperature = config.ollama_temperature
         
-        # If we reach here, none of the endpoints worked
-        return f"Error: Could not connect to Ollama at {self.api_base} after trying multiple endpoints. Please ensure Ollama is running with the model {self.model} loaded."
-    
-    def check_model_availability(self) -> bool:
+        # Set up API endpoints
+        self.api_base = config.ollama_api_endpoint or f"{self.host}/api"
+        self.generate_endpoint = f"{self.api_base}/generate"
+        self.show_endpoint = f"{self.api_base}/show"
+        
+        # Track metrics
+        self.total_tokens = 0
+        self.total_requests = 0
+        self.total_time = 0
+        
+        # Connection configuration
+        self.max_retries = 3
+        self.timeout = 120  # seconds
+        self.connection_verified = False
+        
+        logger.info(f"OllamaClient initialized with host={self.host}, model={self.model}, temperature={self.temperature}")
+        # Verify connection on initialization
+        self.verify_connection()
+        
+    def verify_connection(self) -> bool:
         """
-        Check if the configured model is available in Ollama.
+        Verify connection to Ollama service.
         
         Returns:
-            bool: True if model is available, False otherwise
+            bool: True if connection is successful, False otherwise
         """
-        endpoints = ["/api/tags", "/v1/models"]
+        try:
+            # Try a simple request to verify connection
+            response = requests.get(
+                f"{self.host}/api/version",
+                timeout=5
+            )
+            response.raise_for_status()
+            self.connection_verified = True
+            logger.info(f"Successfully connected to Ollama service: {response.json().get('version', 'unknown version')}")
+            return True
+        except (requests.exceptions.RequestException, socket.error) as e:
+            logger.warning(f"Could not connect to Ollama service at {self.host}: {e}")
+            return False
         
-        for endpoint in endpoints:
+    @cached(ttl=7200)  # Cache responses for 2 hours
+    def generate(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate text using Ollama API with caching.
+        
+        Args:
+            prompt: The prompt text
+            options: Additional generation options
+            
+        Returns:
+            str: Generated text
+        """
+        start_time = time.time()
+        self.total_requests += 1
+        
+        # Prepare request
+        request_data = {
+            "model": self.model,
+            "prompt": prompt,
+            "temperature": self.temperature
+        }
+        
+        # Add any additional options
+        if options:
+            request_data.update(options)
+            
+        logger.debug(f"Sending request to Ollama API: model={self.model}, temp={self.temperature}, prompt_len={len(prompt)}")
+        
+        # Implement retry logic for network-related errors
+        retries = 0
+        last_error = None
+        
+        while retries <= self.max_retries:
             try:
-                url = f"{self.api_base}{endpoint}"
-                print(f"Checking models at: {url}")
-                response = requests.get(url, timeout=10)
+                response = requests.post(
+                    self.generate_endpoint, 
+                    json=request_data, 
+                    timeout=self.timeout
+                )
                 response.raise_for_status()
                 
-                if endpoint == "/api/tags":
-                    models = response.json().get("models", [])
-                    available_models = [model.get("name") for model in models]
-                else:  # /v1/models endpoint
-                    data = response.json()
-                    available_models = [model.get("id") for model in data.get("data", [])]
+                result = response.json()
                 
-                print(f"Available models: {available_models}")
-                return self.model in available_models
+                # Update metrics
+                self.total_tokens += result.get('eval_count', 0)
+                elapsed = time.time() - start_time
+                self.total_time += elapsed
                 
+                logger.debug(f"Ollama API response received in {elapsed:.2f}s, tokens: {result.get('eval_count', 0)}")
+                
+                return result.get("response", "")
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, socket.error) as e:
+                # Only retry for connection-related errors
+                retries += 1
+                last_error = str(e)
+                
+                if retries <= self.max_retries:
+                    wait_time = 2 ** retries  # Exponential backoff
+                    logger.warning(f"Connection error to Ollama API (attempt {retries}/{self.max_retries}). Retrying in {wait_time}s. Error: {last_error}")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Failed to connect to Ollama API after {self.max_retries} attempts: {last_error}")
+                    return f"Error: Could not connect to Ollama service after multiple attempts. Please verify that Ollama is running at {self.host}."
             except requests.exceptions.RequestException as e:
-                print(f"Error checking model availability at {endpoint}: {e}")
+                # Don't retry for other types of errors
+                logger.error(f"Error calling Ollama API: {str(e)}")
+                return f"Error: {str(e)}"
+            
+    def generate_with_thinking(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+        """
+        Generate text and extract thinking process if available.
         
-        return False
+        Args:
+            prompt: The prompt text
+            options: Additional generation options
+            
+        Returns:
+            Dict: Dictionary with 'response' and 'reasoning' keys
+        """
+        content = self.generate(prompt, options)
+        
+        if content.startswith("Error:"):
+            return {"response": "", "reasoning": f"Error: {content}"}
+            
+        # Extract thinking output (if any)
+        thinking = ""
+        if "<think>" in content and "</think>" in content:
+            import re
+            thinking_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+            if thinking_match:
+                thinking = thinking_match.group(1).strip()
+                # Remove the thinking tags from content
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                
+        return {"response": content, "reasoning": thinking}
+        
+    def generate_with_retry(self, prompt: str, max_retries: int = 3, 
+                           options: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate text with automatic retries on failure.
+        
+        Args:
+            prompt: The prompt text
+            max_retries: Maximum number of retry attempts
+            options: Additional generation options
+            
+        Returns:
+            str: Generated text
+        """
+        retries = 0
+        backoff = 2  # Initial backoff in seconds
+        last_response = ""
+        
+        while retries <= max_retries:
+            result = self.generate(prompt, options)
+            
+            # Check for error
+            if not result.startswith("Error:"):
+                return result
+                
+            last_response = result
+            retries += 1
+            
+            if retries <= max_retries:
+                wait_time = backoff * (2 ** (retries - 1))  # Exponential backoff
+                logger.warning(f"Retry {retries}/{max_retries} after {wait_time}s: {result}")
+                time.sleep(wait_time)
+                
+        # Return the last error response after all retries
+        return last_response
+        
+    def get_model_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current model.
+        
+        Returns:
+            Dict: Model information
+        """
+        try:
+            response = requests.post(
+                self.show_endpoint,
+                json={"name": self.model},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error getting model info: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
+            
+    def get_metrics(self) -> Dict[str, Union[int, float]]:
+        """
+        Get usage metrics for the client.
+        
+        Returns:
+            Dict: Usage metrics
+        """
+        avg_time = self.total_time / self.total_requests if self.total_requests > 0 else 0
+        
+        return {
+            "total_requests": self.total_requests,
+            "total_tokens": self.total_tokens,
+            "total_time": round(self.total_time, 2),
+            "avg_time_per_request": round(avg_time, 2)
+        }
+        
+    def reset_metrics(self) -> None:
+        """
+        Reset usage metrics.
+        """
+        self.total_tokens = 0
+        self.total_requests = 0
+        self.total_time = 0
+        logger.debug("OllamaClient metrics reset")

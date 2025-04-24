@@ -1,317 +1,179 @@
 """
-PRD Processor module - Core functionality for PRD generation
+PRD Processor module - Core orchestrator for PRD generation
 """
-import json
 import os
-from pathlib import Path
 import tempfile
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Tuple
 
-from prd_generator.config import Config
+from prd_generator.core.logging_setup import setup_logging, get_logger
+from prd_generator.core.config import Config
+from prd_generator.core.content_generator import ContentGenerator
+from prd_generator.core.asset_generator import AssetGenerator
+from prd_generator.core.reference_search_manager import ReferenceSearchManager
+from prd_generator.formatters.content_normalizer import ContentNormalizer
 from prd_generator.utils.ollama_client import OllamaClient
 from prd_generator.utils.pdf_generator import PDFGenerator
-from prd_generator.utils.reference_search import ReferenceSearch
-from prd_generator.utils.diagram_generator import DiagramGenerator
-from prd_generator.utils.image_generator import ImageGenerator
 
+# Initialize logger
+logger = get_logger(__name__)
 
 class PRDProcessor:
-    """Main processor class for handling the PRD generation workflow."""
+    """
+    Main orchestrator class for the PRD generation workflow.
+    Coordinates all components of the PRD generation process.
+    """
 
     def __init__(self, config: Config):
-        """Initialize the PRD processor with configuration."""
+        """
+        Initialize the PRD processor with configuration.
+        
+        Args:
+            config: Configuration settings
+        """
         self.config = config
+        
+        # Initialize Ollama client
         self.ollama_client = OllamaClient(config)
+        
+        # Initialize core components
+        self.content_generator = ContentGenerator(config, self.ollama_client)
+        self.content_normalizer = ContentNormalizer()
+        self.asset_generator = AssetGenerator(config, self.content_generator)
+        self.reference_search_manager = ReferenceSearchManager(config)
         self.pdf_generator = PDFGenerator(config)
         
-        # Initialize optional components based on config
-        self.reference_search = ReferenceSearch() if config.enable_search else None
-        self.diagram_generator = DiagramGenerator(config) if config.generate_diagrams else None
+        logger.info(f"PRD Processor initialized with Ollama model: {config.ollama_model}")
         
-        # Initialize ImageGenerator with API key if images are enabled
-        self.image_generator = None
-        if config.generate_images:
-            self.image_generator = ImageGenerator()
-            # Pass the Pixabay API key if available
-            if hasattr(config, 'pixabay_api_key') and config.pixabay_api_key:
-                os.environ["PIXABAY_API_KEY"] = config.pixabay_api_key
-        
-        # Path to the pre-generated AI content
-        self.ai_generated_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'ai_generated.txt')
-    
-    def process_prd(self, prompt_text: str, output_path: str):
+    def process_prd(self, prompt_text: str, output_path: str) -> str:
         """
-        Process the PRD generation workflow from input prompt to final PDF.
+        Process the complete PRD generation workflow from input prompt to final PDF.
         
         Args:
             prompt_text: The input text prompt for PRD generation
             output_path: Path where the output PDF should be saved
-        """
-        # Create temporary directory for asset generation
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Step 1: Generate structured PRD content from prompt
-            prd_content = self._generate_prd_content(prompt_text)
-            
-            # Step 2: Generate images and diagrams if enabled
-            image_files = []
-            diagram_files = []
-            
-            if self.config.generate_images:
-                image_files = self._generate_images(prd_content, temp_dir)
-            
-            if self.config.generate_diagrams:
-                diagram_files = self._generate_diagrams(prd_content, temp_dir)
-            
-            # Step 3: Search for references if enabled
-            references = []
-            if self.config.enable_search:
-                references = self._search_references(prd_content)
-            
-            # Step 4: Generate the final PDF document
-            self.pdf_generator.generate_pdf(
-                prd_content, 
-                output_path,
-                image_files=image_files,
-                diagram_files=diagram_files,
-                references=references
-            )
-    
-    def _generate_prd_content(self, prompt_text: str) -> dict:
-        """
-        Generate structured PRD content using the LLM.
-        
-        Args:
-            prompt_text: The input text prompt for PRD generation
             
         Returns:
-            dict: Structured PRD content organized by sections
+            str: Path to the generated PDF file
         """
-        # First check if we have a pre-generated AI content file
-        if os.path.exists(self.ai_generated_path):
-            try:
-                print(f"Using pre-generated AI content from {self.ai_generated_path}")
-                with open(self.ai_generated_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    return json.loads(content)
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Error reading pre-generated content: {e}")
-                print("Falling back to Ollama API")
+        # Start timing the process
+        start_time = datetime.now()
+        logger.info(f"Starting PRD generation process at {start_time}")
         
-        # If no pre-generated content or error reading it, fall back to original method
-        # Construct the prompt for the LLM with proper instructions
-        system_prompt = """
-        You are a specialized Product Requirements Document (PRD) generator. 
-        Your task is to take a brief product idea or concept and expand it into a comprehensive PRD.
-        
-        Generate a detailed PRD with the following sections:
-        - Executive Summary: Brief overview of the product
-        - Problem Statement: Clear description of the problem being solved
-        - Target Users: Who will use this product
-        - Product Goals: What the product aims to achieve
-        - Requirements & Features: Detailed functionality requirements
-        - User Stories: Key user journeys and scenarios
-        - Technical Requirements: Technical specifications and constraints
-        - Architecture: High-level system design and architecture
-        - Implementation Plan: Timeline and development approach
-        - Success Metrics: How to measure product success
-        - Risks & Mitigation: Potential issues and how to address them
-        - References: Relevant external information sources
-        
-        For each section, provide detailed, specific content based on the input.
-        Include specific feature descriptions, implementation details, and technical specifications where appropriate.
-        
-        Respond with a JSON structure where keys are section names and values are the content.
-        For diagrams, include a key called "diagrams" that contains an array of objects with "title", "type" (sequence/flowchart/class/etc), 
-        and "mermaid_code" for each diagram to be generated.
-        
-        For images, include a key called "image_suggestions" that has descriptions for images that would enhance understanding.
-        
-        For references, add relevant topics to search for in a "search_terms" array.
-        """
-        
-        # Prepare the actual LLM prompt
-        prompt = f"{system_prompt}\n\nHere is the product idea to expand into a PRD:\n\n{prompt_text}"
-        
-        # Get response from Ollama
-        response = self.ollama_client.generate(prompt)
-        
-        # Parse JSON response
         try:
-            # Try to extract JSON from the response
-            content_start = response.find('{')
-            content_end = response.rfind('}') + 1
-            
-            if content_start >= 0 and content_end > content_start:
-                json_content = response[content_start:content_end]
-                prd_content = json.loads(json_content)
-            else:
-                # If no JSON found, use a structured approach to parse the response
-                prd_content = self._parse_unstructured_response(response)
+            # Create temporary directory for asset generation
+            with tempfile.TemporaryDirectory() as temp_dir:
+                logger.info(f"Using temporary directory for assets: {temp_dir}")
                 
-            return prd_content
-            
-        except json.JSONDecodeError:
-            # Fallback for when the LLM doesn't return valid JSON
-            return self._parse_unstructured_response(response)
+                # Step 1: Generate structured PRD content from prompt
+                logger.info("Step 1: Generating PRD content from prompt")
+                try:
+                    prd_content = self.content_generator.generate_content(prompt_text)
+                except Exception as e:
+                    logger.error(f"Error in content generation: {e}", exc_info=True)
+                    # Create minimal content to allow process to continue
+                    prd_content = self._create_fallback_content(prompt_text, str(e))
+                
+                # Step 2: Normalize the content structure
+                logger.info("Step 2: Normalizing content structure")
+                try:
+                    normalized_content = self.content_normalizer.normalize(prd_content)
+                except Exception as e:
+                    logger.error(f"Error in content normalization: {e}", exc_info=True)
+                    # Use original content if normalization fails
+                    normalized_content = prd_content
+                
+                # Step 3: Generate search terms for references
+                logger.info("Step 3: Getting search terms for references")
+                search_terms = None
+                if self.config.enable_search:
+                    try:
+                        search_terms = self.content_generator.generate_search_terms(prd_content)
+                    except Exception as e:
+                        logger.error(f"Error generating search terms: {e}", exc_info=True)
+                
+                # Prepare assets and references collections
+                assets = {"images": [], "diagrams": []}
+                references = []
+                
+                # Step 4: Generate images and diagrams
+                if self.config.generate_images or self.config.generate_diagrams:
+                    logger.info("Step 4: Generating assets (images and diagrams)")
+                    try:
+                        assets = self.asset_generator.generate_assets(prd_content, temp_dir)
+                    except Exception as e:
+                        logger.error(f"Error generating assets: {e}", exc_info=True)
+                
+                # Step 5: Search for references
+                if self.config.enable_search and search_terms:
+                    logger.info("Step 5: Searching for references")
+                    try:
+                        references = self.reference_search_manager.search_references(prd_content, search_terms)
+                    except Exception as e:
+                        logger.error(f"Error searching references: {e}", exc_info=True)
+                
+                # Step 6: Generate the final PDF document
+                logger.info("Step 6: Generating PDF document")
+                try:
+                    self.pdf_generator.generate_pdf(
+                        normalized_content, 
+                        output_path,
+                        image_files=assets.get('images', []),
+                        diagram_files=assets.get('diagrams', []),
+                        references=references
+                    )
+                except Exception as e:
+                    logger.error(f"Error generating PDF: {e}", exc_info=True)
+                    # Try with minimal content as last resort
+                    self._generate_error_pdf(prompt_text, output_path, str(e))
+                
+                # Calculate and log total processing time
+                end_time = datetime.now()
+                processing_time = end_time - start_time
+                logger.info(f"PRD generation completed in {processing_time.total_seconds():.2f} seconds")
+                
+                return output_path
+                
+        except Exception as e:
+            logger.error(f"Error during PRD generation: {e}", exc_info=True)
+            # Create a minimal error document
+            try:
+                self._generate_error_pdf(prompt_text, output_path, str(e))
+                return output_path
+            except:
+                raise RuntimeError(f"PRD generation failed completely: {e}")
     
-    def _parse_unstructured_response(self, response: str) -> dict:
-        """Parse an unstructured response into a structured PRD content dictionary."""
-        prd_content = {}
-        current_section = None
-        content_lines = []
+    def _create_fallback_content(self, prompt_text: str, error_message: str) -> Dict[str, Any]:
+        """Create minimal content structure when generation fails."""
+        fallback_content = {
+            "Executive Summary": f"Document generated from prompt with errors. Original prompt: {prompt_text[:100]}...",
+            "Problem Statement": "The document generation encountered technical issues.",
+            "Error Information": f"Error details: {error_message}",
+        }
         
-        # Simple parsing based on section headers
-        for line in response.split('\n'):
-            line = line.strip()
-            
-            # Check if this is a section header (matches one of our expected sections)
-            is_section_header = False
-            for section in self.config.prd_sections:
-                if line.lower().startswith(section.lower()) or line.lower() == section.lower():
-                    if current_section:
-                        prd_content[current_section] = '\n'.join(content_lines).strip()
-                    current_section = section
-                    content_lines = []
-                    is_section_header = True
-                    break
-            
-            if not is_section_header and current_section:
-                content_lines.append(line)
-        
-        # Don't forget the last section
-        if current_section and content_lines:
-            prd_content[current_section] = '\n'.join(content_lines).strip()
-            
-        # Add empty placeholders for required sections
+        # Add all required sections with placeholder content
         for section in self.config.prd_sections:
-            if section not in prd_content:
-                prd_content[section] = ""
+            if section not in fallback_content:
+                fallback_content[section] = "Content generation failed for this section."
         
-        return prd_content
+        return fallback_content
     
-    def _generate_images(self, prd_content: dict, temp_dir: str) -> list:
-        """Generate images based on the PRD content."""
-        image_files = []
+    def _generate_error_pdf(self, prompt_text: str, output_path: str, error_message: str):
+        """Generate a minimal PDF when regular generation fails."""
+        minimal_content = {
+            "Document Generation Error": f"Failed to generate complete PRD document.\n\nError: {error_message}\n\nOriginal prompt: {prompt_text[:250]}..."
+        }
         
-        # Check if image_suggestions are provided
-        if "image_suggestions" in prd_content and isinstance(prd_content["image_suggestions"], list):
-            for i, suggestion in enumerate(prd_content["image_suggestions"]):
-                if isinstance(suggestion, str):
-                    img_path = os.path.join(temp_dir, f"image_{i+1}.png")
-                    if self.image_generator.generate_image(suggestion, img_path):
-                        # Validate the image before adding it to our file list
-                        try:
-                            from PIL import Image
-                            # Try to open the image to verify it's valid
-                            with Image.open(img_path) as img:
-                                # Force load to verify
-                                img.load()
-                                # If we succeed, add to our list
-                                image_files.append({
-                                    'path': img_path,
-                                    'description': suggestion,
-                                    'section': self._determine_section_for_image(suggestion, prd_content)
-                                })
-                        except Exception as e:
-                            print(f"Skipping invalid image {img_path}: {e}")
-        
-        return image_files
-    
-    def _determine_section_for_image(self, image_description: str, prd_content: dict) -> str:
-        """Determine which section an image belongs to based on its description."""
-        # Simple algorithm - match keywords in description to sections
-        for section, content in prd_content.items():
-            if section in self.config.prd_sections:
-                # Check if there are significant keyword matches
-                keywords = self._extract_keywords(content)
-                description_words = set(image_description.lower().split())
-                
-                # Calculate overlap
-                overlap = len(description_words.intersection(keywords))
-                if overlap > 2:  # If more than 2 significant keywords match
-                    return section
-        
-        # Default to Architecture section if no match
-        return "Architecture"
-    
-    def _extract_keywords(self, text: str) -> set:
-        """Extract significant keywords from text."""
-        # Simple implementation - split and filter common words
-        common_words = {'the', 'and', 'or', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by'}
-        return set(word.lower() for word in text.split() if word.lower() not in common_words and len(word) > 3)
-    
-    def _generate_diagrams(self, prd_content: dict, temp_dir: str) -> list:
-        """Generate diagrams based on the PRD content."""
-        diagram_files = []
-        
-        # Check if diagrams are provided
-        if "diagrams" in prd_content and isinstance(prd_content["diagrams"], list):
-            for i, diagram in enumerate(prd_content["diagrams"]):
-                if isinstance(diagram, dict) and "mermaid_code" in diagram:
-                    diagram_path = os.path.join(temp_dir, f"diagram_{i+1}.png")
-                    
-                    title = diagram.get("title", f"Diagram {i+1}")
-                    diagram_type = diagram.get("type", "flowchart")
-                    mermaid_code = diagram["mermaid_code"]
-                    
-                    if self.diagram_generator.generate_diagram(mermaid_code, diagram_path):
-                        diagram_files.append({
-                            'path': diagram_path,
-                            'title': title,
-                            'type': diagram_type,
-                            'section': diagram.get("section", "Architecture")
-                        })
-        else:
-            # If no diagrams specified, generate at least one architecture diagram
-            if "Architecture" in prd_content:
-                arch_description = prd_content["Architecture"]
-                # Ask LLM to create a Mermaid diagram based on architecture description
-                prompt = f"Create a mermaid diagram for the following architecture description. Respond with only the mermaid code:\n\n{arch_description}"
-                
-                mermaid_code = self.ollama_client.generate(prompt)
-                # Extract just the mermaid code from response
-                if "```mermaid" in mermaid_code:
-                    start = mermaid_code.find("```mermaid") + 10
-                    end = mermaid_code.find("```", start)
-                    if end > start:
-                        mermaid_code = mermaid_code[start:end].strip()
-                
-                diagram_path = os.path.join(temp_dir, "architecture_diagram.png")
-                if self.diagram_generator.generate_diagram(mermaid_code, diagram_path):
-                    diagram_files.append({
-                        'path': diagram_path,
-                        'title': "System Architecture",
-                        'type': "flowchart",
-                        'section': "Architecture"
-                    })
-        
-        return diagram_files
-    
-    def _search_references(self, prd_content: dict) -> list:
-        """Search for relevant references based on PRD content."""
-        references = []
-        
-        # Get search terms if available
-        search_terms = []
-        if "search_terms" in prd_content and isinstance(prd_content["search_terms"], list):
-            search_terms.extend(prd_content["search_terms"])
-        else:
-            # Extract key terms from content
-            if "Executive Summary" in prd_content:
-                # Get key terms from executive summary
-                summary = prd_content["Executive Summary"]
-                # Simple extraction of key phrases
-                key_terms = [term.strip() for term in summary.split('.') if len(term.strip()) > 10]
-                search_terms.extend(key_terms[:3])  # Take up to 3 key phrases
-            
-            if "Technical Requirements" in prd_content:
-                # Add technical terms
-                tech_req = prd_content["Technical Requirements"]
-                tech_terms = [term.strip() for term in tech_req.split('\n') if len(term.strip()) > 10]
-                search_terms.extend(tech_terms[:3])
-        
-        # Perform the search
-        for term in search_terms:
-            results = self.reference_search.search(term, max_results=2)
-            references.extend(results)
-        
-        return references
+        # Use direct reportlab creation to ensure this works
+        try:
+            self.pdf_generator.generate_pdf(minimal_content, output_path)
+        except Exception as pdf_error:
+            # Last resort: try to create a very basic PDF
+            logger.error(f"Error creating error PDF: {pdf_error}", exc_info=True)
+            from reportlab.pdfgen import canvas
+            c = canvas.Canvas(output_path)
+            c.drawString(100, 750, "Document Generation Error")
+            c.drawString(100, 730, f"Error: {error_message[:50]}...")
+            c.drawString(100, 710, f"Original prompt: {prompt_text[:50]}...")
+            c.save()

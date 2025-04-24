@@ -40,6 +40,129 @@ cp .env.example .env
 # Edit the .env file with your configurations
 ```
 
+## JSON Structure
+
+The PRD generator produces and consumes JSON with the following structure:
+
+```json
+{
+  "Executive Summary": {
+    "content": "Brief overview of the product and its purpose."
+  },
+  "Problem Statement": {
+    "content": "Clear description of the problem being solved."
+  },
+  "Target Users": {
+    "content": [
+      "User type one",
+      "User type two",
+      "User type three"
+    ]
+  },
+  "Product Goals": {
+    "content": [
+      "Goal one",
+      "Goal two",
+      "Goal three"
+    ]
+  },
+  "Requirements & Features": {
+    "content": [
+      "Feature one with description",
+      "Feature two with description",
+      "Feature three with description"
+    ]
+  },
+  "User Stories": {
+    "content": [
+      "As a [user type], I want to [action] so that [benefit]",
+      "As a [user type], I want to [action] so that [benefit]"
+    ]
+  },
+  "Technical Requirements": {
+    "content": [
+      "Technical requirement one",
+      "Technical requirement two"
+    ]
+  },
+  "Architecture": {
+    "content": [
+      "Architecture component one",
+      "Architecture component two"
+    ],
+    "diagrams": [
+      {
+        "title": "System Architecture",
+        "type": "flowchart",
+        "mermaid_code": "graph TD\nA[Component A] --> B[Component B]\nB --> C[Component C]"
+      }
+    ]
+  },
+  "Implementation Plan": {
+    "content": [
+      "Phase 1: Description and timeline",
+      "Phase 2: Description and timeline" 
+    ]
+  },
+  "Success Metrics": {
+    "content": [
+      "Metric one",
+      "Metric two" 
+    ]
+  },
+  "Risks & Mitigation": {
+    "content": [
+      "Risk one: Mitigation strategy",
+      "Risk two: Mitigation strategy"
+    ]
+  },
+  "References": {
+    "content": [
+      "Reference one",
+      "Reference two"
+    ],
+    "search_terms": ["term one", "term two", "term three"]
+  },
+  "image_suggestions": [
+    "Description of image one",
+    "Description of image two"
+  ]
+}
+```
+
+### JSON Structure Notes
+
+- **Section Content Types**: Content for each section can be either:
+  - A string (direct text content)
+  - An object with a `content` key (which can be a string or array)
+  - For list-type content, an array of strings is used
+
+- **Special Fields**:
+  - `diagrams`: Array of diagram objects with title, type, and mermaid_code
+  - `search_terms`: Array of terms used for reference search
+  - `image_suggestions`: Array of descriptions for images to generate
+
+- **Diagram Types**:
+  - `flowchart`: For system flows and processes
+  - `sequence`: For time-based interaction sequences
+  - `class`: For class/component relationships
+  - `gantt`: For project timelines
+  - Others supported by Mermaid syntax
+
+- **Content Normalization**: The system automatically normalizes content from different formats:
+  - Arrays are converted to bullet points in the final PDF
+  - Dictionary content with nested structure is properly extracted
+  - Proper formatting is maintained throughout the PDF generation process
+
+### Storing and Debugging PRD Content
+
+PRD content is automatically saved to the `data/debug/` directory with timestamped filenames for debugging purposes:
+
+- `prd_content_[timestamp].json`: The parsed PRD content
+- `raw_response_[timestamp].txt`: The raw response from the LLM
+
+These files can be used for debugging issues with the PRD generation process.
+
 ## Usage
 
 ### Basic usage
