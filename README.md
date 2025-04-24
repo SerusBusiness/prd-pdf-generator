@@ -10,6 +10,8 @@ A Python tool that generates Product Requirement Documents (PRDs) from simple te
 - Add relevant images for concept visualization
 - Search for and include reference links to related resources
 - Output polished PDF documents with proper formatting
+- Automatic timestamp-based unique filenames for generated documents
+- "Powered by AI" footer on all PDF pages
 
 ## Requirements
 
@@ -27,7 +29,7 @@ cd prd-generator
 
 2. Install the package:
 ```bash
-pip install -e .
+pip install -e . 
 ```
 
 3. Configure environment variables:
@@ -156,6 +158,14 @@ prd-gen -i prompt.txt -o carbon_app_prd.pdf
     - `diagram_generator.py`: Mermaid diagram generation
     - `image_generator.py`: Image generation
     - `reference_search.py`: Web search for references
+
+## Output Details
+
+When generating a PRD, the system automatically:
+
+- Creates a timestamp-based unique filename (e.g., `prd_document_20250423_185142.pdf`) when no output file is specified
+- Adds a professional "Powered by AI" footer to each page
+- Includes the generation timestamp in the footer for version tracking
 
 ## License
 

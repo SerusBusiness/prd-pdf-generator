@@ -6,6 +6,7 @@ from pathlib import Path
 import markdown
 import textwrap
 import io
+from datetime import datetime
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -13,6 +14,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak, Flowable, KeepTogether
 from reportlab.lib.units import inch, mm
 from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.pdfgen.canvas import Canvas
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from prd_generator.config import Config
 from PIL import Image as PILImage
 
@@ -77,6 +80,44 @@ class SafeImage(Image):
             self.drawHeight *= scale
             
         return Image.wrap(self, availWidth, availHeight)
+
+
+class FooterCanvas(Canvas):
+    """Canvas implementation that adds a footer to each page."""
+    
+    def __init__(self, *args, **kwargs):
+        self.footer_text = kwargs.pop('footer_text', "Powered by AI")
+        self.timestamp = kwargs.pop('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M'))
+        Canvas.__init__(self, *args, **kwargs)
+        
+    def drawPage(self, page):
+        """Add the page with the footer at the bottom."""
+        self._add_footer()
+        page.drawOn(self, 0, 0)
+        self.showPage()
+        
+    def _add_footer(self):
+        """Draw footer on the canvas."""
+        footer_text = self.footer_text
+        timestamp = self.timestamp
+        
+        # Set font and size
+        self.setFont('Helvetica', 8)
+        
+        # Calculate positions
+        page_width = self._pagesize[0]
+        page_height = self._pagesize[1]
+        
+        # Calculate text width to center it
+        footer_width = stringWidth(footer_text, 'Helvetica', 8)
+        timestamp_width = stringWidth(timestamp, 'Helvetica', 8)
+        
+        # Draw footer text on the left side
+        self.setFillColor(colors.darkgrey)
+        self.drawString(15, 20, footer_text)
+        
+        # Draw timestamp on the right side
+        self.drawRightString(page_width - 15, 20, timestamp)
 
 
 class PDFGenerator:
@@ -161,14 +202,20 @@ class PDFGenerator:
         if references is None:
             references = []
             
-        # Create the document
+        # Create timestamp for footer
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+            
+        # Create the document with custom canvas to add footer
+        def make_canvas(*args, **kwargs):
+            return FooterCanvas(*args, footer_text="Powered by AI", timestamp=timestamp, **kwargs)
+        
         doc = SimpleDocTemplate(
             output_path,
             pagesize=A4,
             leftMargin=self.config.margin,
             rightMargin=self.config.margin,
             topMargin=self.config.margin,
-            bottomMargin=self.config.margin
+            bottomMargin=self.config.margin + 15  # Extra margin at bottom for footer
         )
         
         # Create content list
@@ -235,7 +282,7 @@ class PDFGenerator:
         
         # Build the PDF with error handling
         try:
-            doc.build(content)
+            doc.build(content, canvasmaker=make_canvas)
         except Exception as e:
             print(f"Error building PDF: {str(e)}")
             # Try rebuild with more conservative image sizing
@@ -244,7 +291,7 @@ class PDFGenerator:
             
             # Rebuild content list with safer settings
             content = self._rebuild_content_list_safely(prd_content, image_files, diagram_files, references)
-            doc.build(content)
+            doc.build(content, canvasmaker=make_canvas)
     
     def _rebuild_content_list_safely(self, prd_content, image_files, diagram_files, references):
         """Rebuild the content list with more conservative image sizing."""

@@ -8,3 +8,4 @@ markdown
 cairosvg
 python-dotenv
 duckduckgo-search
+huggingface_hub>=0.22.0

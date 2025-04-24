@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add support for .env file
 def load_env_file():
@@ -143,10 +144,11 @@ def main():
     if args.output:
         output_path = args.output
     else:
-        # If no output path provided, use a default
+        # If no output path provided, use a default with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output')
         os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, 'prd_document.pdf')
+        output_path = os.path.join(output_dir, f'prd_document_{timestamp}.pdf')
     
     # Process the PRD generation
     print(f"Generating PRD from prompt...")

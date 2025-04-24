@@ -1,6 +1,4 @@
-"""
-Diagram Generator module for creating Mermaid diagrams using an external microservice
-"""
+# -*- coding: utf-8 -*-
 import os
 import subprocess
 import tempfile
@@ -330,7 +328,7 @@ class DiagramGenerator:
             return False
     
     def _visualize_diagram_structure(self, draw, mermaid_code, diagram_type, width, height, code_font, text_color, border_color):
-        """Visualize the structure of the diagram based on its type and content."""
+        """Visualize the structure of the diagram based on its type and content.""" 
         arrow_color = border_color
         
         # Draw code preview in a scrollable area (first few lines)
@@ -374,7 +372,7 @@ class DiagramGenerator:
             self._draw_generic_diagram(draw, mermaid_code, width, visual_y_start, visual_area_height, arrow_color)
     
     def _draw_sequence_diagram(self, draw, mermaid_code, width, y_start, height, arrow_color):
-        """Draw a simplified sequence diagram visualization."""
+        """Draw a simplified sequence diagram visualization.""" 
         # Extract participants
         participants = re.findall(r'participant\s+([A-Za-z0-9_]+)', mermaid_code)
         if not participants:
@@ -426,7 +424,7 @@ class DiagramGenerator:
             arrow_y += arrow_spacing
     
     def _draw_class_diagram(self, draw, mermaid_code, width, y_start, height, arrow_color):
-        """Draw a simplified class diagram visualization."""
+        """Draw a simplified class diagram visualization.""" 
         # Extract classes
         classes = re.findall(r'class\s+([A-Za-z0-9_]+)', mermaid_code)
         if not classes:
@@ -535,7 +533,7 @@ class DiagramGenerator:
                         draw.text((x, y+15), class_name, fill=arrow_color, anchor="mm")
     
     def _draw_flowchart(self, draw, mermaid_code, width, y_start, height, arrow_color):
-        """Draw a simplified flowchart visualization."""
+        """Draw a simplified flowchart visualization.""" 
         # Extract nodes and connections
         nodes = re.findall(r'([A-Za-z0-9_]+)(?:\s*\[|\s*\(|\s*\{)', mermaid_code)
         if not nodes:
@@ -642,7 +640,7 @@ class DiagramGenerator:
                     draw.polygon([next_x - node_width//2 - 5, center_y-5, next_x - node_width//2, center_y, next_x - node_width//2 - 5, center_y+5], fill=arrow_color)
     
     def _draw_er_diagram(self, draw, mermaid_code, width, y_start, height, arrow_color):
-        """Draw a simplified ER diagram visualization."""
+        """Draw a simplified ER diagram visualization.""" 
         # Extract entities
         entities = re.findall(r'([A-Za-z0-9_]+)\s*{', mermaid_code)
         if not entities:
@@ -793,7 +791,7 @@ class DiagramGenerator:
                       width*3//4 - 70, y_start + height*3//4 + 5], fill=arrow_color)
     
     def _optimize_image(self, image_path: str) -> bool:
-        """Optimize the generated diagram image for PDF quality."""
+        """Optimize the generated diagram image for PDF quality.""" 
         try:
             with Image.open(image_path) as img:
                 # Ensure white background (convert transparent to white)

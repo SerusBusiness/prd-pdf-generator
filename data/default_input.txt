@@ -1,74 +1,173 @@
 # ODOO ERP CUSTOM DEVELOPMENT PROJECT
 # โครงการพัฒนา ODOO ERP แบบปรับแต่ง
 
-## PROJECT OVERVIEW | ภาพรวมโครงการ
-ให้นักศึกษาฝึกงาน 7 คน ร่วมกันพัฒนาโปรแกรม ERP ODOO community version 17 โดยการแบ่งหน้าที่ตามที่ได้รับการจัดสรรตามความสนใจและความถนัด
+**Document Version:** 1.0 | **Last Updated:** April 23, 2025
 
-Development team consists of 7 intern students working together to develop custom addons for ODOO community version 17, with responsibilities assigned according to their interests and skills.
+## TABLE OF CONTENTS
+1. Project Overview
+2. Primary Requirements
+3. Optional Features
+4. Project Goals
+5. Timeline & Milestones
+6. Team Structure & Responsibilities
 
-## PRIMARY REQUIREMENTS | ความต้องการหลัก
-พัฒนาโดยการเพิ่ม custom addons เพื่อแก้ไขหรือเพิ่ม feature ให้กับ ODOO โดยมี features หลักที่เป็น requirement อยู่ 2 อย่าง ดังนี้:
+---
 
-The project involves developing custom addons to modify or add features to ODOO with two primary requirements:
+## 1. PROJECT OVERVIEW | ภาพรวมโครงการ
 
-### 1. OAuth Integration | การเชื่อมต่อ OAuth
-การเพิ่ม OAuth ให้สัมพันธ์กับการ login เข้าสู่ระบบเดิมของ ODOO โดยมี 2 ผู้ให้บริการที่จำเป็นต้องเชื่อมต่อ นั่นก็คือ Google และ Facebook
+This project mobilizes a team of 7 intern developers to create custom addons for ODOO Community Version 17, enhancing its functionality through strategic feature implementation.
 
-Implement OAuth authentication that integrates with ODOO's existing login system, supporting two essential service providers:
-- Google OAuth 2.0
-- Facebook Login API
+ให้นักศึกษาฝึกงาน 7 คน ร่วมกันพัฒนาโปรแกรม ERP ODOO community version 17 โดยการสร้าง custom addons ที่เพิ่มประสิทธิภาพการทำงานผ่านการพัฒนา features ตามความต้องการ
 
-### 2. OdooAI Chat Integration | การเชื่อมต่อ OdooAI ในระบบแชท
-ให้เพิ่มหรือปรับ group chat ของ ODOO ให้สามารถ invite OdooAI เข้ามาใน group เพื่อเริ่มสนทนาด้วยกันได้ 
+**Development Stack:**
+- ODOO Community v17
+- Python 3.8+
+- PostgreSQL
+- OAuth API Integration
+- LLM API Integration
 
-Enhance ODOO's group chat functionality to allow inviting an AI assistant (OdooAI) to conversations.
+---
+
+## 2. PRIMARY REQUIREMENTS | ความต้องการหลัก
+
+The project focuses on two essential feature additions, designed to enhance user authentication and communication:
+
+พัฒนาโดยการเพิ่ม custom addons เพื่อแก้ไขหรือเพิ่ม feature ให้กับ ODOO โดยมุ่งเน้นที่ความต้องการหลัก 2 ประการดังนี้:
+
+### 2.1 OAuth Integration | การเชื่อมต่อ OAuth
+
+Implement a comprehensive OAuth authentication system integrated with ODOO's native login framework, supporting:
+
+การเพิ่ม OAuth ให้สัมพันธ์กับการ login เข้าสู่ระบบเดิมของ ODOO โดยรองรับ:
+
+- **Google OAuth 2.0** - Complete authentication flow with profile mapping
+- **Facebook Login API** - Secure token management and user provisioning
+- **Account Linking** - Associating existing accounts with social logins
+- **Security Standards** - CSRF protection, token encryption, and secure session handling
+
+**Technical Requirements:**
+- Secure credential storage
+- User profile synchronization
+- Session persistence
+- Administrator controls
+
+### 2.2 OdooAI Chat Integration | การเชื่อมต่อ OdooAI ในระบบแชท
+
+Enhance ODOO's native group chat with an intelligent AI assistant (OdooAI) that participates contextually in conversations.
+
+ให้เพิ่มหรือปรับ group chat ของ ODOO ให้สามารถรวม OdooAI เข้ามาในการสนทนากลุ่มเพื่อช่วยเหลือผู้ใช้อย่างชาญฉลาด
 
 #### OdooAI Behavior | พฤติกรรมของ OdooAI:
-OdooAI จะเข้าร่วมสนทนาก็ต่อเมื่อ:
+
+**Participation Triggers:**
+- ✅ Direct invitation to group chat
+- ✅ Messages without specific mentions
+- ✅ Direct mentions (@OdooAI or @everyone)
+- ❌ Messages specifically mentioning other users only
+
+OdooAI จะเข้าร่วมสนทนาเมื่อ:
 - ถูก invite เข้ามาในกลุ่ม
 - เมื่อสมาชิกในกลุ่มเริ่มส่งข้อความโดยไม่ mention ถึงใครโดยเฉพาะ
 - ถูก mention เช่น @OdooAI หรือ @everyone
 
-OdooAI will participate in conversations when:
-- It's invited to the group
-- A group member sends a message without mentioning anyone specific
-- It's mentioned directly (e.g., @OdooAI or @everyone)
-
 OdooAI จะไม่เข้าร่วมบทสนทนาเมื่อ:
 - มีการ mention ไปที่ผู้อื่นโดยเฉพาะเจาะจงโดยไม่มี OdooAI อยู่ในนั้น
 
-OdooAI will not participate when:
-- Messages mention specific individuals without including OdooAI
+**Context Awareness:**
+- Full access to chat history
+- Topic understanding
+- Thread continuity
+- Context-relevant responses
 
-#### Context Access | การเข้าถึงบริบท:
-OdooAI จะสามารถเข้าถึง topic หรือ history ของ group chat นั้นได้ เพื่อความเข้าใจในบริบทของบทสนทนาทั้งหมด
+OdooAI จะสามารถเข้าถึง topic หรือ history ของ group chat นั้นได้ เพื่อความเข้าใจในบริบทของบทสนทนาทั้งหมดและการตอบสนองที่เหมาะสม
 
-OdooAI should have access to the topic and history of the group chat to understand the full context of conversations.
+---
 
-## OPTIONAL FEATURES | คุณสมบัติเสริม
-Future features to consider:
+## 3. OPTIONAL FEATURES | คุณสมบัติเสริม
 
-### Personal Customization | การปรับแต่งส่วนบุคคล
-- Personalize OdooAI (ระบุความสนใจ หรือวิธีการในการตอบเช่น ตอบอย่างเป็นทางการ หรือสนุกสนาน)
-- Allow users to customize AI responses (formal, casual, technical)
+The following features are recommended for future development phases:
 
-### System Control | การควบคุมระบบ
-- Access and control ODOO system through AI assistant commands
-- Implement permission levels for AI system actions
+### 3.1 Personal Customization | การปรับแต่งส่วนบุคคล
 
-### External Integration | การเชื่อมต่อภายนอก
-- Collaboration with third parties through standardized APIs
-- Support for Model Context Protocol (MCP) for AI service integration
+- AI personality preferences (formal, casual, technical)
+- User-specific interaction history
+- Customizable response length and detail level
+- Department-specific knowledge bases
 
-## PROJECT GOALS | เป้าหมายโครงการ
-โปรเจคนี้เกิดขึ้นเพื่อให้นักศึกษาฝึกงานทั้งหมดได้:
-- มีโอกาสทดลองทำงานร่วมกัน
-- ได้รับการฝึกฝนการค้นคว้าข้อมูลที่เกี่ยวข้องกับงานที่ได้รับผิดชอบในอนาคต
-- ได้ฝึกการบริหารจัดการภายในกลุ่ม
-- ได้เก็บผลงานเป็นประวัติหรือ portfolio เป็นของตัวเอง
+### 3.2 System Control | การควบคุมระบบ
 
-This project aims to provide intern students with opportunities to:
-- Experience collaborative work in a development team
-- Practice researching information related to their future responsibilities
-- Learn group management and coordination
-- Build a professional portfolio with tangible results
+- Voice-activated commands for ODOO functions
+- Role-based permissions for AI system actions
+- Automated workflow triggers through chat
+- System status monitoring and alerts
+
+### 3.3 External Integration | การเชื่อมต่อภายนอก
+
+- Model Context Protocol (MCP) compliance
+- Third-party API connectors
+- Data extraction from external systems
+- Cross-platform notification synchronization
+
+---
+
+## 4. PROJECT GOALS | เป้าหมายโครงการ
+
+This project serves dual purposes - delivering valuable ODOO enhancements while providing professional development for the intern team:
+
+โปรเจคนี้มีเป้าหมายทั้งการพัฒนาระบบ ODOO และการพัฒนาทักษะของนักศึกษาฝึกงาน:
+
+### Professional Development:
+
+- **Collaborative Development** - Experience real-world team software projects
+- **Research Methodology** - Learn to find and apply technical solutions independently
+- **Team Management** - Practice coordination, task allocation, and progress tracking
+- **Portfolio Building** - Create demonstrable professional accomplishments
+
+### Technical Achievement:
+
+- **Modular Architecture** - Create maintainable, extensible code
+- **Authentication Security** - Implement industry-standard protocols
+- **AI Integration** - Gain experience with LLM implementation
+- **User Experience** - Enhance ODOO usability and accessibility
+
+---
+
+## 5. TIMELINE & MILESTONES | ระยะเวลาและเป้าหมายระยะสั้น
+
+The project spans 1.5 months (April 22 - June 7, 2025) with the following milestones:
+
+| Phase | Dates | Deliverables |
+|-------|-------|-------------|
+| Planning | Apr 22-30 | Requirements analysis, environment setup, research |
+| Prototype | May 1-15 | Working OAuth prototype, AI integration proof-of-concept |
+| Development | May 16-31 | Complete core functionality implementation, testing |
+| Finalization | Jun 1-7 | Bug fixes, documentation, handover preparation |
+
+**Work Management:**
+- Team members should balance this project with primary responsibilities
+- Timeline is flexible within milestone constraints
+- Consult senior staff when guidance is needed
+
+ระยะเวลากำหนด 1 เดือนครึ่ง โดยเริ่มนับจากวันที่ 22/04/2025 โดยใช้เวลา 1 เดือนโดยประมาณ ในการเริ่มศึกษา ค้นคว้า ทำความเข้าใจ รวมถึงทดลองทำต้นแบบ อีกครึ่งเดือนที่เหลือให้ทำทุกอย่างให้สมบูรณ์ตาม requirements 
+
+ทั้งนี้นี่เป็นเพียงการแนะนำพอสังเขป สามารถจัดสรรค์หรือจัดการกันเองได้เลย และให้ทุกคนระวังและรู้ตัวอยู่เสมอว่าโปรเจคนี้เป็นโปรเจคกรณีศึกษา อย่าให้กระทบการงานหลักที่แต่ละคนรับผิดชอบ หากต้องการคำแนะนำใดๆ ให้สอบถามรุ่นพี่หรือผู้ดูแลของแต่ละคน
+
+---
+
+## 6. TEAM STRUCTURE & RESPONSIBILITIES | โครงสร้างทีมและความรับผิดชอบ
+
+The team of 7 interns will be organized based on skills and interests:
+
+| Role | Responsibilities | Required Skills |
+|------|-----------------|----------------|
+| Project Lead | Coordination, planning, reporting | Project management, communication |
+| OAuth Developers (2) | Authentication system implementation | OAuth, security, API integration |
+| OdooAI Developers (2) | AI assistant logic and integration | LLM API, NLP, message processing |
+| UI/UX Developer | User interface enhancements | Frontend, UX design, accessibility |
+| QA & Documentation | Testing, documentation | Testing methodologies, technical writing |
+
+**Collaboration Tools:**
+- GitHub/GitLab for version control
+- Jira/Trello for task tracking
+- Slack/Discord for communication
+- Weekly progress reviews

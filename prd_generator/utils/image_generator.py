@@ -20,13 +20,15 @@ class ImageGenerator:
         self.api_key = os.environ.get("IMAGE_API_KEY", "")
         # Pixabay API key - get a free one from https://pixabay.com/api/docs/
         self.pixabay_key = os.environ.get("PIXABAY_API_KEY", "")
+        # Hugging Face token
+        self.hf_token = os.environ.get("HUGGINGFACE_TOKEN", "")
     
     def generate_image(self, description: str, output_path: str) -> bool:
         """
         Generate an image based on a text description.
         
-        Currently uses a placeholder image if no API key is set.
-        In a production environment, this would use an image generation service.
+        Uses AI-based image generation with the given description as the prompt.
+        Falls back to alternative methods if AI generation fails.
         
         Args:
             description: Text description of the image to generate
@@ -35,23 +37,75 @@ class ImageGenerator:
         Returns:
             bool: True if successful, False otherwise
         """
-        # Try different methods to generate images
+        # Try different methods to generate images, starting with Hugging Face
         methods = [
+            self._generate_using_huggingface,  # First attempt with Hugging Face
             self._generate_using_dall_e_compatible_api,
-            self._generate_using_pixabay_api,  # Added new Pixabay API method
+            self._generate_using_pixabay_api,  
             self._use_placeholder_image,
-            self._create_text_placeholder_image  # Fallback method
+            self._create_text_placeholder_image  # Final fallback
         ]
         
         for method in methods:
             try:
                 success = method(description, output_path)
                 if success:
+                    print(f"Successfully generated image using {method.__name__}")
                     return True
             except Exception as e:
                 print(f"Error generating image with method {method.__name__}: {e}")
         
         return False
+    
+    def _generate_using_huggingface(self, description: str, output_path: str) -> bool:
+        """Generate an image using Hugging Face's FLUX.1-dev model."""
+        if not self.hf_token:
+            print("No Hugging Face token found. Skipping Hugging Face image generation.")
+            return False
+        
+        try:
+            print(f"Generating image with Hugging Face using prompt: {description}")
+            
+            # Import the InferenceClient for Hugging Face
+            try:
+                from huggingface_hub import InferenceClient
+            except ImportError:
+                print("huggingface_hub package not installed. Please install it with: pip install huggingface_hub")
+                return False
+                
+            # Create the client
+            client = InferenceClient(
+                provider="fal-ai",
+                api_key=self.hf_token,
+            )
+            
+            # Clean up the prompt if necessary
+            if description.lower().startswith("generate an image of"):
+                description = description[len("generate an image of"):].strip()
+            elif description.lower().startswith("generate an image"):
+                description = description[len("generate an image"):].strip()
+            elif description.lower().startswith("generate"):
+                description = description[len("generate"):].strip()
+                
+            # Generate the image using FLUX.1-dev model
+            image = client.text_to_image(
+                description,
+                model="black-forest-labs/FLUX.1-dev",
+            )
+            
+            # Save the image
+            image.save(output_path)
+            
+            # Verify the image exists and is valid
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                print(f"Successfully generated image with Hugging Face for: {description}")
+                return True
+                
+            return False
+            
+        except Exception as e:
+            print(f"Error using Hugging Face for image generation: {e}")
+            return False
     
     def _generate_using_dall_e_compatible_api(self, description: str, output_path: str) -> bool:
         """Generate an image using a DALL-E compatible API if API key is available."""
