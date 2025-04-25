@@ -12,6 +12,7 @@ from prd_generator.core.config import Config
 from prd_generator.core.content_generator import ContentGenerator
 from prd_generator.core.asset_generator import AssetGenerator
 from prd_generator.core.reference_search_manager import ReferenceSearchManager
+from prd_generator.core.enhancers.prompt_enhancer import PromptEnhancer
 from prd_generator.formatters.content_normalizer import ContentNormalizer
 from prd_generator.utils.ollama_client import OllamaClient
 from prd_generator.utils.pdf_generator import PDFGenerator
@@ -42,6 +43,7 @@ class PRDProcessor:
         self.content_normalizer = ContentNormalizer()
         self.asset_generator = AssetGenerator(config, self.content_generator)
         self.reference_search_manager = ReferenceSearchManager(config)
+        self.prompt_enhancer = PromptEnhancer(config) if config.enable_search else None
         self.pdf_generator = PDFGenerator(config)
         
         logger.info(f"PRD Processor initialized with Ollama model: {config.ollama_model}")
@@ -65,6 +67,21 @@ class PRDProcessor:
             # Create temporary directory for asset generation
             with tempfile.TemporaryDirectory() as temp_dir:
                 logger.info(f"Using temporary directory for assets: {temp_dir}")
+                
+                # Step 0: Enhance prompt with search results if enabled
+                if self.config.enhance_prompt and self.prompt_enhancer:
+                    logger.info("Step 0: Enhancing input prompt with search results")
+                    try:
+                        enhanced_prompt = self.prompt_enhancer.enhance_prompt(prompt_text)
+                        if enhanced_prompt != prompt_text:
+                            logger.info(f"Prompt enhanced: original {len(prompt_text)} characters, " + 
+                                        f"enhanced {len(enhanced_prompt)} characters")
+                            prompt_text = enhanced_prompt
+                        else:
+                            logger.info("No prompt enhancement was performed")
+                    except Exception as e:
+                        logger.error(f"Error enhancing prompt: {e}", exc_info=True)
+                        logger.info("Continuing with original prompt")
                 
                 # Step 1: Generate structured PRD content from prompt
                 logger.info("Step 1: Generating PRD content from prompt")

@@ -30,6 +30,13 @@ class Config:
     generate_diagrams: bool = True
     skip_ai_generated: bool = True
     
+    # Search settings
+    search_context: Optional[str] = None
+    enhance_prompt: bool = False
+    max_references_for_enhancement: int = 5
+    max_snippet_length: int = 300
+    cache_enhanced_prompts: bool = True
+    
     # Reasoning model settings
     handle_thinking: bool = True
     keep_thinking: bool = False

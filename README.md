@@ -259,6 +259,48 @@ The free tier of Google's Custom Search API includes:
 
 For most PRD generation use cases, the free tier should be sufficient.
 
+## Prompt Enhancement Feature
+
+The PRD Generator now includes an intelligent prompt enhancement feature that can improve the quality of generated PRDs by automatically searching for relevant information and incorporating it into the input prompt before sending it to the LLM.
+
+### How it works
+
+When enabled, the prompt enhancement feature:
+
+1. Extracts key search terms from your input prompt
+2. Searches for relevant information using the configured search provider
+3. Enhances your input prompt with this additional context
+4. Sends the enhanced prompt to the LLM for PRD generation
+
+This process helps the LLM create more informed PRDs with accurate technical details, industry standards, and best practices.
+
+### Using Prompt Enhancement
+
+To use the prompt enhancement feature, simply add the `--enhance-prompt` flag when running the PRD Generator:
+
+```bash
+python run.py --input data/iot_cross_platform.txt --enhance-prompt
+```
+
+Note that prompt enhancement requires search functionality to be enabled. If you use `--enhance-prompt` with `--no-search`, search will be automatically enabled.
+
+For best results, combine prompt enhancement with search context:
+
+```bash
+python run.py --input data/iot_cross_platform.txt --search "IoT security standards" --enhance-prompt
+```
+
+### Configuration
+
+You can configure prompt enhancement behavior in the config:
+
+- `enhance_prompt`: Enable/disable prompt enhancement (default: False)
+- `max_references_for_enhancement`: Max number of references to include (default: 5)
+- `max_snippet_length`: Max length of each reference snippet (default: 300)
+- `cache_enhanced_prompts`: Save enhanced prompts for debugging (default: True)
+
+Enhanced prompts are cached in `data/search_cache/` for review and debugging.
+
 ## Example
 
 ```bash

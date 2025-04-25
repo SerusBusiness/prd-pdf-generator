@@ -12,6 +12,7 @@ from pathlib import Path
 from prd_generator.core.config import Config, load_env_file
 from prd_generator.core.logging_setup import setup_logging, get_logger
 from prd_generator.prd_processor import PRDProcessor
+from prd_generator.utils.cache_manager import cache
 
 # Initialize logging
 setup_logging()
@@ -46,6 +47,14 @@ def generate_prd_from_prompt(prompt_text, output_path, config=None):
 def main():
     """Main entry point for the PRD Generator application."""
     try:
+        # Initialize the cache system and repair if needed
+        try:
+            cache_repair_count = cache.repair()
+            if cache_repair_count > 0:
+                logger.info(f"Cache repair completed. Removed {cache_repair_count} corrupted cache entries.")
+        except Exception as cache_error:
+            logger.warning(f"Cache initialization error: {cache_error}. Continuing without cache.")
+            
         # Load environment variables from .env file
         load_env_file()
         
@@ -73,6 +82,19 @@ def main():
             help="Output PDF file path (default: auto-generated with timestamp)"
         )
         
+        # Cache options
+        cache_group = parser.add_argument_group("Cache Options")
+        cache_group.add_argument(
+            "--clear-cache",
+            action="store_true",
+            help="Clear all cached content before running"
+        )
+        cache_group.add_argument(
+            "--no-cache",
+            action="store_true",
+            help="Disable caching for this run"
+        )
+        
         # Model options
         model_group = parser.add_argument_group("Model Options")
         model_group.add_argument(
@@ -90,8 +112,15 @@ def main():
         feature_group = parser.add_argument_group("Features")
         feature_group.add_argument(
             "--search",
+            nargs="?", 
+            const=True,
+            metavar="CONTEXT",
+            help="Enable reference document search with optional context file or direct text"
+        )
+        feature_group.add_argument(
+            "--enhance-prompt",
             action="store_true",
-            help="Enable reference document search"
+            help="Enhance the input prompt with search results before generating content"
         )
         feature_group.add_argument(
             "--no-search",
@@ -124,6 +153,20 @@ def main():
         # Parse the arguments
         args = parser.parse_args()
         
+        # Handle cache options
+        if args.clear_cache:
+            try:
+                cleared_count = cache.clear()
+                logger.info(f"Cache cleared: {cleared_count} entries removed")
+            except Exception as e:
+                logger.warning(f"Failed to clear cache: {e}")
+        
+        # Disable caching if requested
+        if args.no_cache:
+            # Set an extremely short TTL to effectively disable the cache
+            cache.ttl = 1
+            logger.info("Caching disabled for this session")
+        
         # Initialize configuration
         config = Config()
         
@@ -138,8 +181,38 @@ def main():
             config.enable_search = True
         elif args.search:
             config.enable_search = True
+            # Handle search context if provided
+            if isinstance(args.search, str):
+                search_context_text = ""
+                # Check if it's a file path
+                search_context_path = Path(args.search).resolve()
+                if search_context_path.exists() and search_context_path.is_file():
+                    try:
+                        with open(search_context_path, 'r', encoding='utf-8') as f:
+                            search_context_text = f.read()
+                        logger.info(f"Loaded search context from file: {search_context_path}")
+                    except Exception as e:
+                        logger.error(f"Error reading search context file: {e}")
+                        logger.info("Using search context as direct text")
+                        search_context_text = args.search
+                else:
+                    # Use as direct text
+                    search_context_text = args.search
+                    logger.info("Using provided text as search context")
+                
+                if search_context_text:
+                    config.search_context = search_context_text
+                    logger.info(f"Search context set ({len(search_context_text)} characters)")
         elif args.no_search:
             config.enable_search = False
+            
+        # Set prompt enhancement option
+        if args.enhance_prompt:
+            if not config.enable_search:
+                logger.warning("Prompt enhancement requires search to be enabled; enabling search")
+                config.enable_search = True
+            config.enhance_prompt = True
+            logger.info("Prompt enhancement enabled")
             
         config.generate_images = not args.no_images
         config.generate_diagrams = not args.no_diagrams
@@ -170,7 +243,7 @@ def main():
         else:
             # If no input provided, try to use the default_input.txt
             default_input_path = config.data_dir / 'default_input.txt'
-            if default_input_path.exists():
+            if (default_input_path.exists()):
                 try:
                     with open(default_input_path, 'r', encoding='utf-8') as f:
                         prompt_text = f.read()
